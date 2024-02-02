@@ -1,0 +1,6 @@
+@Metabase_HostAddress = http://localhost:5206
+
+GET {{Metabase_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
