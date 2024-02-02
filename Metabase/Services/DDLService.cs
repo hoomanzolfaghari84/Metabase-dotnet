@@ -6,6 +6,7 @@ using Metabase.Models.Constraints;
 using Metabase.Persistence;
 using Metabase.Utils;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections;
 using System.Data;
 using System.Text;
@@ -111,7 +112,7 @@ namespace Metabase.Services
 
                 var refedRelation = await _metaContext.Relations
                                                         .Where(r => r.Database.Id == databaseId && r.Name == fk.ReferencedTableName)
-                                                        .SingleOrDefaultAsync(cancellationToken) ?? throw new Exception();
+                                                        .SingleOrDefaultAsync(cancellationToken) ?? throw new Exception("referenced relation does not exist");
 
                 Models.Constraints.ForeignKeyConstraint foreignKeyConstraint = new()
                 {
@@ -171,7 +172,8 @@ namespace Metabase.Services
             
             foreach (var attribute in relationModel.Attributes)
             {
-                script += $"{attribute.Name} {attribute.Type} ";
+                script += $"{attribute.Name} {attribute.Type}";
+
                 if (attribute.Length is not null)
                 {
                     if (attribute.Length == -1)
@@ -180,6 +182,7 @@ namespace Metabase.Services
                         script += $"({attribute.Length}) ";
 
                 }
+                else script += " ";
 
                 if (attribute.PrimaryKey) script += "PRIMARY KEY ";
                 else
@@ -238,9 +241,11 @@ namespace Metabase.Services
                 throw new Exception("relation not found");
 
             if (await _metaContext.Attributes.AnyAsync(a => a.Name == requestDTO.AttributeName && a.Relation.Id == relationId && a.Relation.Database.Id == databaseId))
-                throw new Exception("this attribute name alrady exists in this table");
+                throw new Exception("this attribute name already exists in this table");
 
             //if its a new pk drop old one and corresponding fks
+
+            string script = $"ALTER TABLE {relation.Name} ADD ";
 
             AttributeModel attributeModel = new AttributeModel()
             {
@@ -249,23 +254,52 @@ namespace Metabase.Services
                 NotNull = requestDTO.NotNull,
                 Unique = requestDTO.Unique,
                 PrimaryKey = requestDTO.PrimaryKey,
-                Type = requestDTO.SqlDbType
+                Type = requestDTO.SqlDbType,
+                Length = requestDTO.Length,
             };
+
+            script += $"{attributeModel.Name} {attributeModel.Type}";
+
+            if (attributeModel.Length is not null)
+            {
+                if (attributeModel.Length == -1)
+                    script += "(max) ";
+                else
+                    script += $"({attributeModel.Length}) ";
+
+            }
+            else script += " ";
+
+            if (attributeModel.PrimaryKey) script += "PRIMARY KEY ";
+            else
+            {
+                if (attributeModel.NotNull) script += "NOT NULL ";
+                if (attributeModel.Unique) script += "UNIQUE ";
+            }
+
 
             if (requestDTO.DefaultValue is not null)
             {
-                DefaultConstraint defaultConstraint = new DefaultConstraint()
+                DefaultConstraint defaultConstraint = new()
                 {
                     Attribute = attributeModel,
                     Type = requestDTO.SqlDbType,
                     Value = SQLTypeHelpers.ConvertSQLStringValueToByteArray(requestDTO.DefaultValue, requestDTO.SqlDbType),
                 };
 
-                await _metaContext.DefaultConstraints.AddAsync(defaultConstraint);
+                script += $"DEFAULT {defaultConstraint.Type.GetSqlValueLiteral(defaultConstraint.Value)} ";
+
+                await _metaContext.DefaultConstraints.AddAsync(defaultConstraint, cancellationToken);
+
+                
             }
 
-
             await _metaContext.Attributes.AddAsync(attributeModel, cancellationToken);
+
+            using DatabasesContext context = new($"Data Source=HOOMAN-LAPTOP\\SQLEXPRESS;Initial Catalog={db.Name};Integrated Security=True;Connect Timeout=30;Encrypt=True;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
+            _logger.LogInformation("Executing Raw Sql :" + script);
+            await context.Database.ExecuteSqlRawAsync(script, cancellationToken);
+
             await _metaContext.SaveChangesAsync(cancellationToken);
 
             return attributeModel;
