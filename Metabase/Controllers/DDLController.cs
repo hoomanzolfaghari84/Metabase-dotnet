@@ -32,13 +32,13 @@ namespace Metabase.Controllers
         }
 
         [HttpPost("Database/{databaseId}/Relation/{relationId}/Attribute")]
-        public async Task<ActionResult<AttributeModel>> CreateAttribute(int databaseId, int relationId, CreateAttributeRequestDTO requestDTO, CancellationToken cancellationToken = default)
+        public async Task<ActionResult<CreateAttributeResponseDTO>> CreateAttribute(int databaseId, int relationId, CreateAttributeRequestDTO requestDTO, CancellationToken cancellationToken = default)
         {
             return Ok(await _DDLService.CreateAttributeAsync(databaseId, relationId, requestDTO, cancellationToken));
         }
 
         [HttpPost("Database/{databaseId}/Relation/{relationId}/ForeignKeyConstraint")]
-        public async Task<ActionResult<AttributeModel>> CreateForeignKeyConstraintAsync(int databaseId, int relationId, CreateForeignKeyConstraintRequestDTO requestDTO, CancellationToken cancellationToken = default)
+        public async Task<ActionResult<CreateForeignKeyResponseDTO>> CreateForeignKeyConstraintAsync(int databaseId, int relationId, CreateForeignKeyConstraintRequestDTO requestDTO, CancellationToken cancellationToken = default)
         {
             return Ok(await _DDLService.CreateForeginKeyConstraint(databaseId, relationId, requestDTO, cancellationToken));
         }

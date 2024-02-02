@@ -42,13 +42,5 @@ namespace Metabase.Controllers
             return Ok(await _DMLService.GetRelationByNameAsync(databaseName, relationName, cancellationToken));
         }
 
-        [HttpPost("Database/ByName/{databaseName}")]
-        public async Task<ActionResult> ExecuteQuery()
-        {
-            throw new NotImplementedException();
-        }
-
-
-
     }
 }

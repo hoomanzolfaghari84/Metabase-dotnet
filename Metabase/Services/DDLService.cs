@@ -10,6 +10,7 @@ using System;
 using System.Collections;
 using System.Data;
 using System.Text;
+using System.Xml.Linq;
 
 namespace Metabase.Services
 {
@@ -125,6 +126,9 @@ namespace Metabase.Services
                 bool hasWholleKey = HasWholeKey(fk, refedKs);
 
                 var refs = new List<FKReference>();
+
+                if (fk.AttributeReferences.Count == 0) throw new Exception();
+
                 foreach (var tuple in fk.AttributeReferences)
                 {
                     if (!attNames.Contains(tuple.From)) throw new Exception("att name not in from");
@@ -232,7 +236,7 @@ namespace Metabase.Services
             return pk.All(a => fkToNames.Contains(a));
         }
 
-        public async Task<AttributeModel> CreateAttributeAsync(int databaseId, int relationId, CreateAttributeRequestDTO requestDTO, CancellationToken cancellationToken = default)
+        public async Task<CreateAttributeResponseDTO> CreateAttributeAsync(int databaseId, int relationId, CreateAttributeRequestDTO requestDTO, CancellationToken cancellationToken = default)
         {
             if (requestDTO.PrimaryKey && (requestDTO.Unique || requestDTO.NotNull)) throw new Exception("pk is already notnull and unique");
 
@@ -247,7 +251,7 @@ namespace Metabase.Services
 
             string script = $"ALTER TABLE {relation.Name} ADD ";
 
-            AttributeModel attributeModel = new AttributeModel()
+            AttributeModel attributeModel = new()
             {
                 Relation = relation,
                 Name = requestDTO.AttributeName,
@@ -296,16 +300,28 @@ namespace Metabase.Services
 
             await _metaContext.Attributes.AddAsync(attributeModel, cancellationToken);
 
-            using DatabasesContext context = new($"Data Source=HOOMAN-LAPTOP\\SQLEXPRESS;Initial Catalog={db.Name};Integrated Security=True;Connect Timeout=30;Encrypt=True;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
+            string dbname = await _metaContext.Databases.Where(d => d.Id == databaseId).Select(d => d.Name).SingleOrDefaultAsync() ?? throw new Exception();
+
+            using DatabasesContext context = new($"Data Source=HOOMAN-LAPTOP\\SQLEXPRESS;Initial Catalog={dbname};Integrated Security=True;Connect Timeout=30;Encrypt=True;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
             _logger.LogInformation("Executing Raw Sql :" + script);
             await context.Database.ExecuteSqlRawAsync(script, cancellationToken);
 
             await _metaContext.SaveChangesAsync(cancellationToken);
 
-            return attributeModel;
+            return new CreateAttributeResponseDTO()
+            {
+                Id = attributeModel.Id,
+                Name = attributeModel.Name,
+                RelationName = attributeModel.Relation.Name,
+                Type = requestDTO.SqlDbType.ToString(),
+                Length = requestDTO.Length,
+                NotNull = attributeModel.NotNull,
+                PrimaryKey = attributeModel.PrimaryKey,
+                Unique = attributeModel.Unique,
+            };
         }
 
-        public async Task<Models.Constraints.ForeignKeyConstraint> CreateForeginKeyConstraint(int databaseId, int relationId, CreateForeignKeyConstraintRequestDTO requestDTO, CancellationToken cancellationToken = default)
+        public async Task<CreateForeignKeyResponseDTO> CreateForeginKeyConstraint(int databaseId, int relationId, CreateForeignKeyConstraintRequestDTO requestDTO, CancellationToken cancellationToken = default)
         {
             var relation = await _metaContext.Relations.Where(r => r.Id == relationId && r.Database.Id == databaseId)
                 .Include(r => r.Attributes)
@@ -322,12 +338,18 @@ namespace Metabase.Services
 
             };
 
+            string script = $"ALTER TABLE {relation.Name} ADD FOREIGN KEY (";
+            string refscript = "("; 
+
             var attNames = relation.Attributes.Select(a => a.Name).ToList();
 
             var refedKs = await _metaContext.Attributes.Where(a => a.Relation.Id == refedRelation.Id && (a.PrimaryKey || a.Unique)).ToListAsync(cancellationToken);
             bool hasWholleKey = HasWholeKey(requestDTO, refedKs);
 
             var refs = new List<FKReference>();
+
+            if (requestDTO.AttributeReferences.Count == 0) throw new Exception();
+
             foreach (var tuple in requestDTO.AttributeReferences)
             {
                 if (!attNames.Contains(tuple.From)) throw new Exception("att name not in from");
@@ -338,14 +360,40 @@ namespace Metabase.Services
                     ReferencedAttribute = refedKs.Single(a => a.Name == tuple.To),
                     ReferencingAttribute = relation.Attributes.Single(a => a.Name == tuple.From),
                 });
+
+                script += $"{tuple.From},";
+                refscript += $"{tuple.To},";
+
             }
+
+            script = script.Remove(script.Length - 1);
+            refscript = refscript.Remove(refscript.Length - 1);
+            script += ")";
+            refscript += ")";
+
+            script += $" REFERENCES {refedRelation.Name}" + refscript;
 
             foreignKey.References = refs;
 
             await _metaContext.ForeignKeyConstraints.AddAsync(foreignKey, cancellationToken);
+
+            string dbname = await _metaContext.Databases.Where(d => d.Id == databaseId).Select(d => d.Name).SingleOrDefaultAsync() ?? throw new Exception();
+
+            using DatabasesContext context = new($"Data Source=HOOMAN-LAPTOP\\SQLEXPRESS;Initial Catalog={dbname};Integrated Security=True;Connect Timeout=30;Encrypt=True;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
+            _logger.LogInformation("Executing Raw Sql :" + script);
+            await context.Database.ExecuteSqlRawAsync(script, cancellationToken);
+
             await _metaContext.SaveChangesAsync(cancellationToken);
 
-            return foreignKey;
+            return new CreateForeignKeyResponseDTO()
+            {
+                Id = foreignKey.Id,
+                ReferencedRelationId = refedRelation.Id,
+                ReferencedRelationName = refedRelation.Name,
+                ReferencingRelationId = relation.Id,
+                ReferencingRelationName = relation.Name,
+                References = foreignKey.References.Select(r=> new FKRefrenceDTO() { From = r.ReferencingAttribute.Name, To = r.ReferencedAttribute.Name }).ToList(),
+            };
         }
 
 

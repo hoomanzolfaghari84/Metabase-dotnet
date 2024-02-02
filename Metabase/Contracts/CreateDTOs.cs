@@ -15,7 +15,6 @@ namespace Metabase.Contracts
 
     public record CreateAttributeRequestDTO
     {
-        public string RelationName { get; set; } = string.Empty;
         public string AttributeName { get; set; }
         public SqlDbType SqlDbType { get; set; }
         public int? Length {  get; set; }

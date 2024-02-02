@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Metabase")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6119f4e8770c0992c3a482c4d62d67ce5e4faefb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c394d6a012bbc160e52e8f7175a7bffb645d3a2b")]
 [assembly: System.Reflection.AssemblyProductAttribute("Metabase")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Metabase")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
