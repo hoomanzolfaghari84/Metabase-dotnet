@@ -15,6 +15,11 @@ namespace Metabase.Controllers
         {
             _DMLService = dMLService;
         }
+        [HttpGet("Database")]
+        public async Task<ActionResult<List<string>>> GetAllDatabases(CancellationToken cancellationToken = default)
+        {
+           return Ok( await _DMLService.GetAllDatabases(cancellationToken));
+        }
 
         [HttpGet("Database/{databaseId}")]
         public async Task<ActionResult<GetDatabaseResponseDTO>> GetDatabaseAsync(int databaseId, CancellationToken cancellationToken = default)

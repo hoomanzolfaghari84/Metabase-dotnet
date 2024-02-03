@@ -110,5 +110,10 @@ namespace Metabase.Services
         {
             throw new NotImplementedException();
         }
+
+        public async Task<List<string>> GetAllDatabases(CancellationToken cancellationToken)
+        {
+            return await _metaContext.Databases.Select(d=> "name:"+ d.Name + " id:" + d.Id).ToListAsync();
+        }
     }
 }

@@ -5,6 +5,7 @@ using Metabase.Models.Attributes;
 using Metabase.Models.Constraints;
 using Metabase.Persistence;
 using Metabase.Utils;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections;
@@ -396,9 +397,136 @@ namespace Metabase.Services
             };
         }
 
+        public async Task ImportDatabase(string databaseName, CancellationToken cancellationToken)
+        {
+            string connectionString = $"Data Source=HOOMAN-LAPTOP\\SQLEXPRESS;Initial Catalog={databaseName};Integrated Security=True;Connect Timeout=30;Encrypt=True;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False";
 
+
+            using SqlConnection connection = new(connectionString);
+
+            connection.Open();
+
+            DataTable table = connection.GetSchema("Tables");
+
+            DatabaseModel databaseModel = new DatabaseModel() { Name = databaseName};
+            List<RelationModel> relationModels = new();
+            foreach(DataRow row in table.Rows)
+            {
+                string tableName = row["TABLE_NAME"].ToString() ?? throw new Exception("no table name");
+
+                using SqlCommand sqlCommand = new SqlCommand($"SELECT * FROM {tableName}", connection);
+
+                using SqlDataReader reader = sqlCommand.ExecuteReader();
+
+                DataTable columnSchema = reader.GetSchemaTable();
+
+                RelationModel relationModel = new()
+                {
+                    Name = tableName,
+                    Database = databaseModel,
+            
+                };
+                List<AttributeModel> attributeModels = new();
+                foreach (DataRow colrow in columnSchema.Rows)
+                {
+                    // Get the column name and data type from the row
+                    string columnName = colrow["ColumnName"].ToString() ?? throw new Exception();
+                    string dataType = colrow["DataType"].ToString() ?? throw new Exception();
+                    
+
+                    // Get the unique, key, and nullability properties from the row
+                    bool isUnique = colrow["IsUnique"] is null ? false : true;
+                    bool isKey = colrow["IsKey"] is null ? false : true;
+                    bool allowNull = colrow["AllowDBNull"] is null ? false : true;
+                    
+
+                    AttributeModel attributeModel = new()
+                    {
+                        Name = columnName,
+                        Type = SQLTypeHelpers.GetSqlTypeFromString(dataType),
+                        NotNull = !allowNull,
+                        PrimaryKey = isKey,
+                        Unique = isUnique,
+                        Relation = relationModel,
+                        
+                    };
+
+                    attributeModels.Add(attributeModel);
+                    #region fk
+                    //using (SqlCommand foreignCommand = new SqlCommand("SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName", connection))
+                    //{
+                    //    // Set the parameters for the query
+                    //    foreignCommand.Parameters.AddWithValue("@TableName", tableName);
+                    //    foreignCommand.Parameters.AddWithValue("@ColumnName", columnName);
+
+                    //    // Execute the query and get a SqlDataReader object
+                    //    using (SqlDataReader foreignReader = foreignCommand.ExecuteReader())
+                    //    {
+                    //        // Loop through the rows in the foreign key constraint result
+                    //        string refedTableName = "";
+                    //        Models.Constraints.ForeignKeyConstraint fk = new()
+                    //        {
+                    //            Relation = relationModel,
+
+                    //        };
+                    //        while (foreignReader.Read())
+                    //        {
+                    //            // Get the foreign key constraint name and referenced table and column from the row
+                    //            string foreignName = foreignReader["CONSTRAINT_NAME"].ToString();
+                    //            string foreignTable = foreignReader["REFERENCED_TABLE_NAME"].ToString();
+                    //            string foreignColumn = foreignReader["REFERENCED_COLUMN_NAME"].ToString();
+
+                    //            if(refedTableName == foreignTable)
+                    //            // Display the foreign key constraint name and referenced table and column
+                    //            Console.WriteLine(foreignName + " - " + foreignTable + "." + foreignColumn);
+                    //        }
+                    //    }
+                    //}
+                    #endregion
+                }
+                relationModel.Attributes = attributeModels;
+                relationModels.Add(relationModel);
+            }
+            databaseModel.Relations = relationModels;
+
+
+
+            await _metaContext.Databases.AddAsync(databaseModel,cancellationToken);
+            await _metaContext.SaveChangesAsync(cancellationToken);
+        }
+
+        private List<Models.Constraints.ForeignKeyConstraint> getfks(string connstring)
+        {
+            SqlConnection conn = new SqlConnection(connstring);
+
+            // Create a command object
+            SqlCommand cmd = new SqlCommand("SELECT * FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS", conn);
+
+            // Specify the command type as text
+            cmd.CommandType = CommandType.Text;
+
+            // Open the connection
+            conn.Open();
+
+            // Execute the command and get the result set
+            SqlDataReader reader = cmd.ExecuteReader();
+
+            // Loop through the rows and display the foreign key information
+            while (reader.Read())
+            {
+                Console.WriteLine("Foreign key name: {0}", reader["CONSTRAINT_NAME"]);
+                Console.WriteLine("Referencing table: {0}", reader["CONSTRAINT_TABLE_NAME"]);
+                Console.WriteLine("Referenced table: {0}", reader["UNIQUE_CONSTRAINT_TABLE_NAME"]);
+                Console.WriteLine("Update rule: {0}", reader["UPDATE_RULE"]);
+                Console.WriteLine("Delete rule: {0}", reader["DELETE_RULE"]);
+                Console.WriteLine();
+            }
+
+            // Close the reader and the connection
+            reader.Close();
+            conn.Close();
+        }
 
         
-
     }
 }

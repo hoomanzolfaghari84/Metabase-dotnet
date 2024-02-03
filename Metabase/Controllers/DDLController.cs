@@ -43,7 +43,12 @@ namespace Metabase.Controllers
             return Ok(await _DDLService.CreateForeginKeyConstraint(databaseId, relationId, requestDTO, cancellationToken));
         }
 
-
+        [HttpPost("Database/{databaseName}")]
+        public async Task<IActionResult> ImportDatabase(string databaseName, CancellationToken cancellationToken = default)
+        {
+            await _DDLService.ImportDatabase(databaseName, cancellationToken);
+            return NoContent();
+        } 
 
 
 

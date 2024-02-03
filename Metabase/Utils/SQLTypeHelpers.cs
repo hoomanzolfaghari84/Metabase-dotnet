@@ -82,5 +82,16 @@ namespace Metabase.Utils
         {
             return type switch { SqlDbType.VarChar => "VARCHAR(MAX)" };
         }
+
+
+        public static SqlDbType GetSqlTypeFromString(string v)
+        {
+            return v switch
+            {
+                "System.Int32" => SqlDbType.Int,
+                "System.String" => SqlDbType.VarChar,
+                _ => throw new Exception("type not supported" + v)
+            };
+        }
     }
 }
